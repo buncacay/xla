@@ -1,55 +1,100 @@
 from ultralytics import YOLO
-from PIL import Image
 import cv2
+import numpy as np
 import easyocr
 
-# Đường dẫn đến ảnh và mô hình
-path = r'test\AQUA7_77379_checkin_2020-10-29-22-4Ftq5x7prc9_jpg.rf.8a793fca6975e6c70cd465d8871840ed.jpg'
 path2 = r'best (5).pt'
+path = r'test\AQUA7_68500_checkout_2020-10-27-9-5i_bcxs0boz_jpg.rf.3cb563adcb61154fb576b110b8e7da0e.jpg'
 
-# Tải mô hình YOLO
 model = YOLO(path2)
+
+detected_texts = [] 
 results3 = model(path)
+image = cv2.imread(path)
 
-# Kiểm tra kết quả từ YOLO
-for r in results3:
-    boxes = r.boxes.xyxy  # Tọa độ (x1, y1, x2, y2) của các hộp bao quanh
-    if len(boxes) == 0:
-        print("Không phát hiện đối tượng nào.")
-        continue  # Nếu không có hộp nào, bỏ qua vòng lặp
-
-    for i, box in enumerate(boxes):
-        x1, y1, x2, y2 = map(int, box)  
-        image = cv2.imread(path)
-        cropped_image = image[y1:y2, x1:x2]
+def straighten_image(gray, output_path):
+    # Chuyển đổi ảnh sang màu xám
+    
+    cv2.imshow('adfasdf', gray)
+    # Phát hiện cạnh
+    edges = cv2.Canny(gray, 50, 150, apertureSize=3)
+    
+    # Tìm các đường thẳng trong ảnh
+    lines = cv2.HoughLines(edges, 1, np.pi / 180, 200)
+    
+    # Tính toán góc trung bình của các đường thẳng
+    angles = []
+    if lines is not None:
+        for rho, theta in lines[:, 0]:
+            angle = (theta * 180 / np.pi) - 90  # Chuyển đổi radian sang độ
+            angles.append(angle)
+    
+    if angles:
+        # Tính góc trung bình
+        mean_angle = np.mean(angles)
         
-        # Lưu và hiển thị ảnh đã cắt
-        cv2.imwrite(f'cropped_plate_{i}.jpg', cropped_image)
-        im = Image.fromarray(cropped_image[..., ::-1])  # Chuyển đổi từ BGR sang RGB
-        im.show(f'Cropped Plate {i}')
-
-        # Làm to ảnh (tăng kích thước)
-        scale_factor = 2  # Thay đổi hệ số tỷ lệ theo nhu cầu
-        enlarged_image = cv2.resize(cropped_image, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_LINEAR)
-
-        # Chuyển ảnh đã làm to sang màu xám
-        gray_image = cv2.cvtColor(enlarged_image, cv2.COLOR_BGR2GRAY)
+        # Lấy kích thước của ảnh
+        (h, w) = gray.shape[:2]
         
-        # Tách ngưỡng
-        _, thresholded_image = cv2.threshold(gray_image, 127, 255, cv2.THRESH_BINARY)
+        # Tạo ma trận xoay
+        M = cv2.getRotationMatrix2D((w // 2, h // 2), mean_angle, 1.0)
+        
+        # Xoay ảnh
+        rotated = cv2.warpAffine(gray, M, (w, h))
+        
+        cv2.imshow('phang ',rotated )
+        # Lưu ảnh đã làm phẳng
+        cv2.imwrite(output_path, rotated)
+        
+        print(f"Đã lưu ảnh đã làm phẳng tại: {output_path}")
+        return rotated  # Trả về ảnh đã làm phẳng
+    else:
+        print("Không tìm thấy đường thẳng nào trong ảnh.")
+        return gray  # Trả về ảnh gốc nếu không tìm thấy đường thẳng
 
-        # Hiển thị ảnh xám và ảnh đã tách ngưỡng
-        cv2.imshow('Gray Image', gray_image)
-        cv2.imshow('Thresholded Image', thresholded_image)
+def pre(cropped_image):
+    gray_image = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2GRAY) 
+    min_pixel = np.min(gray_image)
+    max_pixel = np.max(gray_image)
+    contrast_stretch = ((gray_image - min_pixel) / (max_pixel - min_pixel) * 255).astype(np.uint8)
+    blurred_image2 = cv2.GaussianBlur(contrast_stretch, (5, 5), 0)
+    blurred_image = cv2.GaussianBlur(blurred_image2, (5, 5), 0)
+    thresholded_image2 = cv2.adaptiveThreshold(blurred_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+    
+    # Làm phẳng ảnh
+    straightened_image = straighten_image(thresholded_image2, 'out.jpg')
+    
+    cv2.imshow('Thresholded Image', thresholded_image2)
+    cv2.imwrite('contrast_stretch.jpg', thresholded_image2) 
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    return thresholded_image2
 
-        # Nhận diện chữ trong biển số
-        reader = easyocr.Reader(['en'])
-        result = reader.readtext(thresholded_image)
+if image is None:
+    print("Không thể tải ảnh. Vui lòng kiểm tra đường dẫn.")
+else:
+    for r in results3:
+        boxes = r.boxes.xyxy  
+        if len(boxes) == 0:
+            continue 
 
-        # In kết quả nhận diện
-        for (bbox, text, prob) in result:
-            print(f'Text: {text}, Probability: {prob}')
+        for i, box in enumerate(boxes):
+            x1, y1, x2, y2 = map(int, box)  
 
-# Chờ cho đến khi người dùng nhấn phím
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+            border_color = (0, 255, 0) 
+            border_thickness = 2  
+            cv2.rectangle(image, (x1, y1), (x2, y2), border_color, border_thickness)
+
+            cropped_image = image[y1:y2, x1:x2]
+            
+            thresholded_image = pre(cropped_image)
+            # Nhận diện bằng easy ocr
+            reader = easyocr.Reader(['en'], gpu=False)
+            result = reader.readtext(thresholded_image)
+            for (bbox, text, prob) in result:
+                print(text)
+                detected_texts.append(text) 
+
+    cv2.imshow('Kết quả nhận diện', image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()

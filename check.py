@@ -1,41 +1,51 @@
 from ultralytics import YOLO
 import cv2
-import os
+import numpy as np
+import easyocr
+path2 = r'best (4).pt'
+path = r'test\27-bien-so-xe-may_jpg.rf.eb139d311c6be0584cfac0c45d786920.jpg'
 
+model = YOLO(path2)
 
-# Đường dẫn đến thư mục chứa ảnh và mô hình
-image_path = r'test\AQUA7_20784_checkin_2020-11-1-15-54V7qhZNYbg5_jpg.rf.aef07f88699022f3e5cb0b58ee017e28.jpg'  # Đường dẫn đến hình ảnh đầu vào
-output_folder = r'output'  # Thư mục để lưu ảnh đã xử lý
-model_path = r'best (5).pt'  # Đường dẫn đến mô hình YOLO
+detected_texts = [] 
+results3 = model(path)
+image = cv2.imread(path)
+if image is None:
+    print("Không thể tải ảnh. Vui lòng kiểm tra đường dẫn.")
+else:
+    for r in results3:
+        boxes = r.boxes.xyxy  
+        if len(boxes) == 0:
+            continue 
 
-# Tạo thư mục đầu ra nếu chưa tồn tại
-os.makedirs(output_folder, exist_ok=True)
+        for i, box in enumerate(boxes):
+            x1, y1, x2, y2 = map(int, box)  
 
-# Tải mô hình YOLO
-model = YOLO(model_path)
+            border_color = (0, 255, 0) 
+            border_thickness = 2  
+            cv2.rectangle(image, (x1, y1), (x2, y2), border_color, border_thickness)
 
-# Dự đoán trên hình ảnh
-results = model(image_path)
+            cropped_image = image[y1:y2, x1:x2]
+            gray_image = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2GRAY)
+            
+            min_pixel = np.min(gray_image)
+            max_pixel = np.max(gray_image)
+            contrast_stretch = ((gray_image - min_pixel) / (max_pixel - min_pixel) * 255).astype(np.uint8)
+            blurred_image = cv2.GaussianBlur(contrast_stretch, (5, 5), 0)
+            thresholded_image = cv2.adaptiveThreshold(blurred_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
 
-# Lấy hình ảnh đầu vào
-image = cv2.imread(image_path)
+            
+            cv2.imshow('Thresholded Image', thresholded_image)
+            cv2.imwrite('contrast_stretch.jpg', thresholded_image) 
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+            # nhan dien bang easy ocr
+            reader = easyocr.Reader(['en'], gpu = False)
+            result = reader.readtext(thresholded_image)
+            for (bbox, text, prob) in result:
+                print(text)
+                detected_texts.append(text) 
 
-# Vẽ bounding boxes lên hình ảnh
-for result in results:
-    boxes = result.boxes
-    for box in boxes:
-        # Lấy tọa độ của bounding box
-        x1, y1, x2, y2 = map(int, box.xyxy[0])  # Tọa độ của bounding box
-        conf = box.conf[0]  # Độ tin cậy
-        label = box.cls[0]  # Nhãn
-
-        # cropped_image = image_np[y1:y2, x1:x2]
-        # Vẽ bounding box lên hình ảnh
-        cv2.rectangle(image, (x1, y1), (x2, y2), (255, 0, 0), 2)  # Vẽ hình chữ nhật
-        cv2.putText(image, f'{label:.2f}', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
-
-# Lưu hình ảnh đã xử lý
-output_image_path = os.path.join(output_folder, 'result_with_text.jpg')
-cv2.imwrite(output_image_path, image)
-
-print(f"Kết quả đã được lưu tại: {output_image_path}")
+    cv2.imshow('easy ocr   ', image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
