@@ -9,7 +9,7 @@ import re
 import os
 
 # Khởi tạo model
-model = YOLO("best.pt")
+model = YOLO("best (2).pt")
 ocr = PaddleOCR(
     use_angle_cls=True,
     lang='en',
@@ -52,6 +52,7 @@ def process_frame(img, texts, filename_base="frame"):
             enhanced_img = enhance_contrast(pre_img)
             enhanced_img_bgr = cv2.cvtColor(enhanced_img, cv2.COLOR_GRAY2BGR)
             resized_img = cv2.resize(enhanced_img_bgr, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
             try:
                 ocr_result = ocr.ocr(resized_img, cls=True)
@@ -67,7 +68,6 @@ def process_frame(img, texts, filename_base="frame"):
                                     text_lines.append(text_raw)
                                     texts.append(text_raw)
 
-                cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
                 for i, line in enumerate(text_lines[::-1]):
                     y_offset = max(y1 - 10 - (i * 20), 5)
                     cv2.putText(img, line, (x1, y_offset),
@@ -125,7 +125,7 @@ def open_video():
 # Giao diện GUI
 root = tk.Tk()
 root.title("YOLO + PaddleOCR GUI")
-root.geometry("600x600")
+root.geometry("1200x600")
 
 Button(root, text="Chọn ảnh", command=open_image).pack(pady=10)
 Button(root, text="Chọn video (tua nhanh)", command=open_video).pack(pady=5)
